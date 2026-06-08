@@ -176,6 +176,25 @@ class TestUserToSummary:
         assert summary["is_popular"] is False  # More followers than followees (5 > 2)
 
 
+class TestStatsApiCompatibility:
+    """Test compatibility with current Polarsteps API payload shapes."""
+
+    def test_stats_accepts_null_country_count(self):
+        """Polarsteps can return null stats.country_count."""
+        stats = Stats(
+            country_count=None,
+            km_count=0,
+            last_trip_end_date=None,
+            like_count=0,
+            step_count=0,
+            time_traveled_in_seconds=0,
+            trip_count=0,
+            world_percentage=0,
+        )
+
+        assert stats.country_count == 0
+
+
 class TestUserToTripsSummary:
     """Test cases for User.to_trips_summary() method."""
 

@@ -8,12 +8,13 @@ from polarsteps_api.models.user import User
 class TripResponse(BaseResponse):
     def __init__(self, data: Any, status_code: int, headers: dict[str, str]) -> None:
         super().__init__(data, status_code, headers)
+        self.model_error: Optional[Exception] = None
         # Only create Trip model if response is successful and data is valid
         if self.is_success and data:
             try:
                 self.trip: Optional[Trip] = Trip(**data)
             except Exception as e:
-                print("Failed to serialize TripResponse: ", e)
+                self.model_error = e
                 self.trip = None
         else:
             self.trip = None
@@ -22,12 +23,13 @@ class TripResponse(BaseResponse):
 class UserResponse(BaseResponse):
     def __init__(self, data: Any, status_code: int, headers: dict[str, str]) -> None:
         super().__init__(data, status_code, headers)
+        self.model_error: Optional[Exception] = None
         # Only create UserData model if response is successful and data is valid
         if self.is_success and data:
             try:
                 self.user: Optional[User] = User(**data)
             except Exception as e:
-                print("Failed to serialize UserResponse: ", e)
+                self.model_error = e
                 self.user = None
         else:
             self.user = None

@@ -1,5 +1,7 @@
 """Unit tests for Trip model and its to_summary methods."""
 
+from datetime import datetime
+
 from polarsteps_api.models.trip import Location, MediaItem, Step, Trip, TripBuddy
 
 
@@ -338,3 +340,42 @@ class TestTripProperties:
         buddies = [TripBuddy(buddy_user_id=1, uuid="buddy-1")]
         trip3 = Trip(id=3, uuid="test3", trip_buddies=buddies)
         assert trip3.is_shared_trip is True
+
+
+class TestTripApiCompatibility:
+    """Test compatibility with current Polarsteps API payload shapes."""
+
+    def test_planned_step_accepts_missing_trip_id_and_iso_timestamps(self):
+        """Planned steps can omit trip_id and return ISO timestamp strings."""
+        start_time = "2026-12-12T23:00:00+00:00"
+        creation_time = "2026-06-01T10:30:00Z"
+
+        trip = Trip(
+            id=123,
+            uuid="trip-uuid",
+            planned_steps=[
+                {
+                    "id": 1,
+                    "uuid": "step-uuid",
+                    "name": "Kuala Lumpur",
+                    "start_time": start_time,
+                    "creation_time": creation_time,
+                }
+            ],
+        )
+
+        step = trip.planned_steps[0]
+        assert step.trip_id is None
+        assert step.start_time == datetime.fromisoformat(start_time).timestamp()
+        assert (
+            step.creation_time
+            == datetime.fromisoformat(creation_time.replace("Z", "+00:00")).timestamp()
+        )
+
+    def test_trip_accepts_iso_timestamps(self):
+        """Trip timestamps can arrive as ISO strings from the API."""
+        start_date = "2026-10-14T22:00:00+00:00"
+
+        trip = Trip(id=123, uuid="trip-uuid", start_date=start_date)
+
+        assert trip.start_date == datetime.fromisoformat(start_date).timestamp()

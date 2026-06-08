@@ -15,9 +15,11 @@ class HTTPClient:
         self,
         base_url: str,
         remember_token: str,
+        api_version: Union[int, str] = 54,
     ):
         self.base_url = base_url.rstrip("/")
         self.remember_token = remember_token
+        self.api_version = str(api_version)
         self.session = requests.Session()
 
         # Set default headers from config
@@ -26,6 +28,7 @@ class HTTPClient:
             "Accept": "application/json",
             "Content-Type": "application/json",
             "Cookie": f"remember_token={remember_token}",
+            "Polarsteps-Api-Version": self.api_version,
         }
 
         self.session.headers.update(headers)
@@ -62,16 +65,21 @@ class HTTPClient:
 
 class PolarstepsClient:
     env_token: str = "POLARSTEPS_REMEMBER_TOKEN"
+    env_api_version: str = "POLARSTEPS_API_VERSION"
     base_url: str = "https://api.polarsteps.com"
 
     def __init__(
         self,
         remember_token: Optional[str] = None,
+        api_version: Optional[Union[int, str]] = None,
         cache_ttl: int = 300,  # 5 minutes,
         cache_maxsize: int = 1_000,
     ):
-        if not remember_token:
+        if not remember_token or api_version is None:
             load_dotenv()
+        if api_version is None:
+            api_version = os.environ.get(self.env_api_version, "54")
+        if not remember_token:
             remember_token = os.environ.get(self.env_token)
         if not remember_token:
             raise ValueError(
@@ -81,6 +89,7 @@ class PolarstepsClient:
         self.http_client = HTTPClient(
             base_url=self.base_url,
             remember_token=remember_token,
+            api_version=api_version,
         )
         self._cache: TTLCache[str, Union[TripResponse, UserResponse]] = TTLCache(
             maxsize=cache_maxsize, ttl=cache_ttl

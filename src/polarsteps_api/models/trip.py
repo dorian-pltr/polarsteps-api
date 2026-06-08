@@ -7,6 +7,21 @@ if TYPE_CHECKING:
     from polarsteps_api.models.user import User
 
 
+def parse_timestamp(v: Any) -> Any:
+    """Parse Polarsteps numeric or ISO timestamp fields to epoch seconds."""
+    if v is None:
+        return v
+    if isinstance(v, str):
+        try:
+            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            return dt.timestamp()
+        except ValueError:
+            return v
+    if isinstance(v, (int, float)) and v < 0:
+        raise ValueError("Timestamp cannot be negative")
+    return v
+
+
 class CoverPhoto(BaseModel):
     id: int
     uuid: str
@@ -23,19 +38,7 @@ class CoverPhoto(BaseModel):
     @classmethod
     def validate_last_modified(cls, v: Any) -> Any:
         """Validate timestamp fields."""
-        if v is None:
-            return v
-        if isinstance(v, str):
-            try:
-                # Parse ISO datetime string to timestamp
-                dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-                return dt.timestamp()
-            except ValueError:
-                # If parsing fails, try to return as is
-                return v
-        if isinstance(v, (int, float)) and v < 0:
-            raise ValueError("Timestamp cannot be negative")
-        return v
+        return parse_timestamp(v)
 
 
 class Location(BaseModel):
@@ -77,7 +80,7 @@ class MediaItem(BaseModel):
 class Step(BaseModel):
     id: int
     uuid: str
-    trip_id: int
+    trip_id: Optional[int] = None
     location: Optional[Location] = None
     start_time: Optional[float] = None
     end_time: Optional[float] = None
@@ -101,6 +104,12 @@ class Step(BaseModel):
     main_media_item_path: Optional[str] = None
     media: Optional[list[MediaItem]] = []
     user_likes: Optional[list[dict[str, Any]]] = []
+
+    @field_validator("start_time", "end_time", "creation_time", mode="before")
+    @classmethod
+    def validate_timestamps(cls, v: Any) -> Any:
+        """Validate timestamp fields."""
+        return parse_timestamp(v)
 
     @property
     def timestamp(self) -> str:
@@ -204,19 +213,7 @@ class Trip(BaseModel):
     @classmethod
     def validate_timestamps(cls, v: Any) -> Any:
         """Validate timestamp fields."""
-        if v is None:
-            return v
-        if isinstance(v, str):
-            try:
-                # Parse ISO datetime string to timestamp
-                dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-                return dt.timestamp()
-            except ValueError:
-                # If parsing fails, try to return as is
-                return v
-        if isinstance(v, (int, float)) and v < 0:
-            raise ValueError("Timestamp cannot be negative")
-        return v
+        return parse_timestamp(v)
 
     @model_validator(mode="after")
     def validate_country_count(self) -> "Trip":

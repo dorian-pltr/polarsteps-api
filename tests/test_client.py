@@ -56,13 +56,16 @@ def assert_response_matches(
         assert response.headers == expected_headers
 
 
-def assert_required_headers_present(headers, remember_token="test_token"):
+def assert_required_headers_present(
+    headers, remember_token="test_token", api_version="54"
+):
     """Helper function to verify required headers are present."""
     required_headers = {
         "User-Agent": "PolarstepsClient/1.0",
         "Accept": "application/json",
         "Content-Type": "application/json",
         "Cookie": f"remember_token={remember_token}",
+        "Polarsteps-Api-Version": api_version,
     }
 
     for key, value in required_headers.items():
@@ -87,10 +90,18 @@ class TestHTTPClient:
     def test_init_sets_attributes_and_headers(self, http_client):
         """Test that HTTPClient sets all attributes and headers correctly."""
         assert http_client.remember_token == "test_token"
+        assert http_client.api_version == "54"
         assert isinstance(http_client.session, requests.Session)
 
         # Verify required headers
         assert_required_headers_present(http_client.session.headers)
+
+    def test_init_accepts_custom_api_version(self):
+        """Test that HTTPClient accepts a custom Polarsteps API version."""
+        client = HTTPClient("https://api.example.com", "test_token", api_version=55)
+
+        assert client.api_version == "55"
+        assert_required_headers_present(client.session.headers, api_version="55")
 
     @patch("requests.Session.request")
     def test_execute_successful_responses(
@@ -161,18 +172,23 @@ class TestHTTPClient:
         assert headers["Accept"] == "application/xml"  # Overridden by request
         assert headers["Content-Type"] == "application/json"
         assert headers["Cookie"] == "remember_token=test_token"
+        assert headers["Polarsteps-Api-Version"] == "54"
         assert headers["Custom-Header"] == "custom-value"
 
 
 class TestPolarstepsClient:
     """Test cases for PolarstepsClient class."""
 
-    def test_init_with_remember_token(self):
+    def test_init_with_remember_token(self, monkeypatch):
         """Test PolarstepsClient initialization with provided remember_token."""
+        monkeypatch.delenv("POLARSTEPS_API_VERSION", raising=False)
+
         client = PolarstepsClient(remember_token="test_token")
+
         assert isinstance(client.http_client, HTTPClient)
         assert client.http_client.remember_token == "test_token"
         assert client.http_client.base_url == "https://api.polarsteps.com"
+        assert client.http_client.api_version == "54"
 
     @pytest.mark.parametrize(
         "env_value,should_raise",
@@ -187,6 +203,7 @@ class TestPolarstepsClient:
         self, mock_load_dotenv, env_value, should_raise, monkeypatch
     ):
         """Test PolarstepsClient initialization with various environment token values."""
+        monkeypatch.delenv("POLARSTEPS_API_VERSION", raising=False)
         if env_value is not None:
             monkeypatch.setenv("POLARSTEPS_REMEMBER_TOKEN", env_value)
         else:
@@ -198,12 +215,42 @@ class TestPolarstepsClient:
         else:
             client = PolarstepsClient()
             assert client.http_client.remember_token == env_value
+            assert client.http_client.api_version == "54"
 
         mock_load_dotenv.assert_called_once()
 
     @patch("polarsteps_api.client.load_dotenv")
+    def test_init_with_env_api_version(self, mock_load_dotenv, monkeypatch):
+        """Test PolarstepsClient initialization with API version from environment."""
+        monkeypatch.setenv("POLARSTEPS_REMEMBER_TOKEN", "env_token")
+        monkeypatch.setenv("POLARSTEPS_API_VERSION", "56")
+
+        client = PolarstepsClient()
+
+        assert client.http_client.api_version == "56"
+        assert_required_headers_present(
+            client.http_client.session.headers,
+            remember_token="env_token",
+            api_version="56",
+        )
+        mock_load_dotenv.assert_called_once()
+
+    @patch("polarsteps_api.client.load_dotenv")
+    def test_init_with_argument_api_version(self, mock_load_dotenv):
+        """Test PolarstepsClient initialization with explicit API version."""
+        client = PolarstepsClient(remember_token="test_token", api_version="57")
+
+        assert client.http_client.api_version == "57"
+        assert_required_headers_present(
+            client.http_client.session.headers,
+            api_version="57",
+        )
+        mock_load_dotenv.assert_not_called()
+
+    @patch("polarsteps_api.client.load_dotenv")
     def test_init_none_token_loads_from_env(self, mock_load_dotenv, monkeypatch):
         """Test PolarstepsClient initialization with None token loads from environment."""
+        monkeypatch.delenv("POLARSTEPS_API_VERSION", raising=False)
         monkeypatch.setenv("POLARSTEPS_REMEMBER_TOKEN", "env_token")
 
         client = PolarstepsClient(remember_token=None)
@@ -243,7 +290,7 @@ class TestPolarstepsClient:
         mock_http_client_class.return_value = mock_http_client
 
         # Create client and call method
-        client = PolarstepsClient(remember_token="test_token")
+        client = PolarstepsClient(remember_token="test_token", api_version="54")
         method = getattr(client, method_name)
         result = method(test_id)
 
@@ -261,6 +308,7 @@ class TestPolarstepsClient:
     def test_class_attributes(self):
         """Test that class attributes are set correctly."""
         assert PolarstepsClient.env_token == "POLARSTEPS_REMEMBER_TOKEN"
+        assert PolarstepsClient.env_api_version == "POLARSTEPS_API_VERSION"
         assert PolarstepsClient.base_url == "https://api.polarsteps.com"
 
 
@@ -321,7 +369,7 @@ class TestIntegration:
         """Test error handling throughout the complete flow."""
         mock_request.side_effect = requests.ConnectionError("Network error")
 
-        client = PolarstepsClient(remember_token="test_token")
+        client = PolarstepsClient(remember_token="test_token", api_version="54")
         result = client.get_trip("trip123")
 
         # Verify error is handled properly
